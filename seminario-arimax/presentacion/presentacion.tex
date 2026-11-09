@@ -1,0 +1,564 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+
+% ---------------------------------------------------------------------
+% Colores azules
+% ---------------------------------------------------------------------
+\definecolor{azulOscuro}{HTML}{0B2545}
+\definecolor{azulPrincipal}{HTML}{1F4E79}
+\definecolor{azulMedio}{HTML}{2E75B6}
+\definecolor{azulClaro}{HTML}{DCE9F5}
+\definecolor{azulCielo}{HTML}{9DC3E6}
+\definecolor{rojoAcento}{HTML}{C0392B}
+
+\usetheme{Madrid}
+\usecolortheme{whale}
+\setbeamercolor{structure}{fg=azulPrincipal}
+\setbeamercolor{palette primary}{bg=azulPrincipal,fg=white}
+\setbeamercolor{palette secondary}{bg=azulMedio,fg=white}
+\setbeamercolor{palette tertiary}{bg=azulOscuro,fg=white}
+\setbeamercolor{frametitle}{bg=azulPrincipal,fg=white}
+\setbeamercolor{title}{bg=azulPrincipal,fg=white}
+\setbeamercolor{block title}{bg=azulPrincipal,fg=white}
+\setbeamercolor{block body}{bg=azulClaro,fg=black}
+\setbeamercolor{block title alerted}{bg=rojoAcento,fg=white}
+\setbeamercolor{block body alerted}{bg=red!5,fg=black}
+\setbeamercolor{block title example}{bg=azulMedio,fg=white}
+\setbeamercolor{block body example}{bg=azulClaro!60,fg=black}
+\setbeamercolor{itemize item}{fg=azulMedio}
+\setbeamercolor{itemize subitem}{fg=azulCielo}
+\setbeamercolor{enumerate item}{fg=azulPrincipal}
+\setbeamertemplate{itemize items}[circle]
+\setbeamertemplate{enumerate items}[circle]
+\setbeamertemplate{blocks}[rounded][shadow=false]
+\setbeamertemplate{navigation symbols}{}
+\setbeamerfont{frametitle}{series=\bfseries}
+\addtobeamertemplate{frametitle}{}{\vspace{2mm}}
+
+% Imagen con respaldo si no existe el archivo
+\newcommand{\figura}[2]{%
+  \IfFileExists{../figuras/#1}{\includegraphics[height=#2]{../figuras/#1}}{%
+  \IfFileExists{figuras/#1}{\includegraphics[height=#2]{figuras/#1}}{%
+  \IfFileExists{#1}{\includegraphics[height=#2]{#1}}{%
+    \fcolorbox{azulPrincipal}{azulClaro}{\parbox[c][#2][c]{0.75\textwidth}{\centering\ttfamily\detokenize{#1}}}}}}}
+
+% ---------------------------------------------------------------------
+\title[ARIMA-X: Tasa de Intervención e IPI]{Modelación Dinámica de la Tasa de Intervención en Colombia}
+\subtitle{Un enfoque ARIMA-X con efectos del Índice de Producción Industrial\\ y análisis de intervención (2014--2026)}
+\author[Grupo 3]{Walys Vera Herrera\\ Iván Andrés Durango Cogollo\\ Nicolás Buenaventura Schlesinger}
+\institute[UdeA]{Seminario de Series de Tiempo -- Grupo 3\\[2pt]
+  Instituto de Matemáticas, Facultad de Ciencias Exactas y Naturales\\ Universidad de Antioquia}
+\date{Noviembre de 2026}
+
+\begin{document}
+
+% =====================================================================
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Contenido}
+  \tableofcontents
+\end{frame}
+
+% =====================================================================
+\section{Introducción}
+% =====================================================================
+
+\begin{frame}[t]{Motivación}
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+    \begin{block}{Tasa de Intervención ($y_t$)}
+      Principal herramienta del Banco de la República para controlar la inflación y estabilizar el ciclo económico.
+    \end{block}
+    \vspace{2mm}
+    \begin{block}{IPI ($x_t$)}
+      Índice de Producción Industrial (DANE): termómetro directo de la actividad económica real.
+    \end{block}
+    \column{0.48\textwidth}
+    \textbf{Pregunta:} ¿los cambios en la producción industrial ayudan a explicar y pronosticar la tasa de intervención?
+    \vspace{3mm}
+    \begin{alertblock}{Problema con MCO}
+      Las series macroeconómicas tienen \textbf{inercia} (memoria): la tasa de hoy depende de la de ayer.
+      \begin{itemize}
+        \item Errores autocorrelacionados.
+        \item Varianza subestimada.
+        \item Falsos positivos (regresión espuria).
+      \end{itemize}
+    \end{alertblock}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Objetivos}
+  \begin{block}{Objetivo general}
+    Modelar y pronosticar la dinámica de la Tasa de Intervención del Banco de la República en función del IPI, mediante regresión dinámica con errores ARIMA (ARIMA-X).
+  \end{block}
+  \vspace{2mm}
+  \textbf{Objetivos específicos}
+  \begin{enumerate}
+    \item Diagnosticar el orden de integración de las series (pruebas de raíz unitaria).
+    \item Identificar rezagos del IPI con pre-blanqueamiento y correlación cruzada (CCF).
+    \item Aislar el choque de la pandemia con análisis de intervención (dummy COVID-19).
+    \item Estimar por Máxima Verosimilitud y validar los residuos (ruido blanco y normalidad).
+    \item Evaluar el pronóstico fuera de muestra (RMSE, MAE, MAPE).
+  \end{enumerate}
+\end{frame}
+
+% =====================================================================
+\section{Marco teórico}
+% =====================================================================
+
+\begin{frame}[t]{Modelos ARMA y ARIMA}
+  \begin{block}{ARMA$(p,q)$ \hfill {\footnotesize (Wei, 2006, p.~57)}}
+    \[
+      \Phi(B)\,Y_t = \Theta(B)\,w_t,\qquad w_t\sim RB(0,\sigma^2)
+    \]
+    \vspace{-4mm}
+    \begin{itemize}
+      \item \textbf{Estacionario:} raíces de $\Phi(B)=0$ fuera del círculo unitario.
+      \item \textbf{Invertible:} raíces de $\Theta(B)=0$ fuera del círculo unitario.
+    \end{itemize}
+  \end{block}
+  \vspace{1mm}
+  \begin{block}{ARIMA$(p,d,q)$ \hfill {\footnotesize (Wei, 2006, pp.~69--71)}}
+    Una serie \textbf{no estacionaria homogénea} se vuelve estacionaria al diferenciarla $d$ veces:
+    \[
+      \phi(B)\,(1-B)^d\,Y_t = \theta(B)\,\varepsilon_t
+    \]
+    $d$ = número de raíces unitarias del polinomio autorregresivo.
+  \end{block}
+\end{frame}
+
+\begin{frame}[t]{Variable exógena}
+  \begin{columns}[c]
+    \column{0.55\textwidth}
+    \begin{itemize}
+      \item \emph{Exo} = ``fuera'': $X_t$ se determina \textbf{fuera} del proceso que genera $Y_t$.
+      \item $X_t$ puede afectar a $Y_t$, pero $Y_t$ \textbf{no} afecta a $X_t$.
+      \item Puede ser una variable explicativa, una dummy o una variable de intervención (Amézquita Bravo, 2021).
+    \end{itemize}
+    \vspace{2mm}
+    \begin{exampleblock}{Ejemplo}
+      La lluvia ($X_t$) afecta el rendimiento agrícola ($Y_t$), pero la cosecha no cambia la lluvia.
+    \end{exampleblock}
+    \column{0.42\textwidth}
+    \centering
+    \begin{tikzpicture}[
+        nodo/.style={draw=azulPrincipal, fill=azulClaro, rounded corners, thick,
+                     minimum width=3.2cm, minimum height=1cm, align=center, font=\small},
+        >={Stealth[length=3mm]}]
+      \node[nodo] (x) {Precipitación\\ $X_t$};
+      \node[nodo, below=1.6cm of x] (y) {Rendimiento\\ agrícola $Y_t$};
+      \draw[->, very thick, azulMedio] (x) -- node[right, font=\footnotesize]{sí afecta} (y);
+      \draw[->, thick, dashed, rojoAcento] (y.east) to[bend right=50]
+        node[right, font=\footnotesize, align=left]{no\\ afecta} (x.east);
+    \end{tikzpicture}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Estructura del modelo ARIMA-X}
+  Con $k$ variables exógenas $X_{1,t},\dots,X_{k,t}$ \hfill {\footnotesize (Ortiz Martín, 2022, p.~20)}
+  \[
+    Y_t = \sum_{i=1}^{k}\beta_i X_{i,t} + \tilde{Y}_t
+    \qquad\Longrightarrow\qquad
+    \tilde{Y}_t = Y_t - \sum_{i=1}^{k}\beta_i X_{i,t}
+  \]
+  \begin{itemize}
+    \item $\beta_i$: efecto directo de la variable exógena $X_{i,t}$.
+    \item $\tilde{Y}_t$: \textbf{serie teórica}, libre del efecto de las exógenas.
+  \end{itemize}
+  \vspace{1mm}
+  \begin{block}{Regresión con errores ARIMA}
+    Se aplica la metodología ARIMA clásica a la serie teórica:
+    \[
+      \Phi(B)\,(1-B)^d\Big(Y_t - \sum_{i=1}^{k}\beta_i X_{i,t}\Big) = \Theta(B)\,w_t,
+      \qquad w_t\sim RB(0,\sigma^2)
+    \]
+  \end{block}
+\end{frame}
+
+\begin{frame}[t]{Ejemplo: demanda de transporte aéreo en Colombia}
+  \vspace{3mm}
+  \textbf{Amézquita Bravo (2021)}, tesis de Maestría en Ciencias Económicas (UNAL).
+  \vspace{2mm}
+  \begin{columns}[T]
+    \column{0.48\textwidth}
+    \begin{block}{Variable respuesta}
+      $Y_t$: pasajeros mensuales del transporte aéreo.
+    \end{block}
+    \column{0.48\textwidth}
+    \begin{block}{Variable exógena}
+      $X_{1,t}$: Producto Interno Bruto (PIB).
+    \end{block}
+  \end{columns}
+  \vspace{4mm}
+  \begin{block}{Modelo ARIMA-X}
+    \vspace{-2mm}
+    \[
+      Y_t = \beta_1\,\mathrm{PIB}_t + \tilde{Y}_t
+      \quad\Longrightarrow\quad
+      \Phi(B)(1-B)^d\big(Y_t - \beta_1\,\mathrm{PIB}_t\big) = \Theta(B)\,w_t
+    \]
+  \end{block}
+  \vspace{4mm}
+  \begin{exampleblock}{Resultado}
+    Incluir el PIB mejoró la precisión: MAPE y RMSE por debajo del 3\%. El precio del petróleo y otros choques resultaron no significativos.
+  \end{exampleblock}
+\end{frame}
+
+\begin{frame}[t]{Análisis de intervención y valores atípicos}
+  \begin{columns}[T]
+    \column{0.5\textwidth}
+    \begin{block}{Intervención \hfill{\footnotesize Box y Tiao (1975)}}
+      \[
+        y_t = \frac{\omega(B)}{\delta(B)}\,\xi_t + N_t
+      \]
+      \vspace{-3mm}
+      \begin{itemize}
+        \item Pulso: $P_t = \mathbb{1}_{\{t=T\}}$
+        \item Escalón: $S_t = \mathbb{1}_{\{t\ge T\}}$
+      \end{itemize}
+      Caso simple: $y_t=\omega S_t + N_t$.\\
+      $H_0:\ \omega=0$ \; vs \; $H_1:\ \omega\neq 0$.
+    \end{block}
+    \column{0.47\textwidth}
+    \begin{block}{Atípicos \hfill{\footnotesize Chen y Liu (1993)}}
+      Intervenciones de fecha y tipo desconocidos:
+      \begin{itemize}
+        \item \textbf{AO} (aditivo): $x_t=\mathbb{1}_{\{t=T_0\}}$
+        \item \textbf{TC} (transitorio): $x_t=\delta^{t-T_0}\mathbb{1}_{\{t\ge T_0\}}$, $\delta\approx0.7$
+        \item \textbf{LS} (cambio de nivel): $x_t=\mathbb{1}_{\{t\ge T_0\}}$
+        \item \textbf{IO} (innovacional)
+      \end{itemize}
+    \end{block}
+  \end{columns}
+\end{frame}
+
+% =====================================================================
+\section{Metodología}
+% =====================================================================
+
+\begin{frame}[t]{Etapas de la metodología}
+  \centering
+  \begin{tikzpicture}[
+      paso/.style={draw=azulPrincipal, fill=azulClaro, rounded corners, thick,
+                   minimum width=4.3cm, minimum height=1.25cm, align=center, font=\small},
+      >={Stealth[length=2.5mm]}]
+    \node[paso] (a) {\textbf{1. Datos}\\ mensualización, log, STL};
+    \node[paso, right=0.6cm of a] (b) {\textbf{2. Estacionariedad}\\ ADF y KPSS};
+    \node[paso, right=0.6cm of b] (c) {\textbf{3. Pre-blanqueamiento}\\ CCF y rezagos};
+    \node[paso, below=0.9cm of c] (d) {\textbf{4. Intervención}\\ dummy COVID-19};
+    \node[paso, left=0.6cm of d] (e) {\textbf{5. Estimación}\\ MV, AIC y BIC};
+    \node[paso, left=0.6cm of e] (f) {\textbf{6. Validación}\\ Ljung-Box y pronóstico};
+    \draw[->, thick, azulMedio] (a) -- (b);
+    \draw[->, thick, azulMedio] (b) -- (c);
+    \draw[->, thick, azulMedio] (c) -- (d);
+    \draw[->, thick, azulMedio] (d) -- (e);
+    \draw[->, thick, azulMedio] (e) -- (f);
+  \end{tikzpicture}
+  \vspace{4mm}
+
+  {\small Todo el procesamiento se realizó en \textbf{R} (\texttt{forecast}, \texttt{tseries}, \texttt{lmtest}).}
+\end{frame}
+
+\begin{frame}[t]{Datos}
+  \textbf{Muestra:} mensual, enero 2014 -- agosto 2026 ($T=152$).
+  \vspace{2mm}
+  \begin{columns}[T]
+    \column{0.49\textwidth}
+    \begin{block}{$y_t$: Tasa de Intervención}
+      \begin{itemize}
+        \item Fuente: Banco de la República (diaria).
+        \item Días no hábiles imputados con LOCF.
+        \item Promedio aritmético mensual.
+      \end{itemize}
+    \end{block}
+    \column{0.49\textwidth}
+    \begin{block}{$x_t$: IPI (DANE)}
+      \begin{itemize}
+        \item Logaritmo y desestacionalización STL.
+        \item Escala $x_t = 100\times\ln(\mathrm{IPI}^{SA})$.
+        \item $\Delta x_t = 1 \approx$ 1\% de cambio en el IPI.
+      \end{itemize}
+    \end{block}
+  \end{columns}
+  \vspace{2mm}
+  \begin{block}{Dummy de pandemia}
+    \[
+      D_t^{COVID} =
+      \begin{cases}
+        1, & \text{marzo 2020} \le t \le \text{octubre 2020}\\
+        0, & \text{en otro caso}
+      \end{cases}
+    \]
+  \end{block}
+\end{frame}
+
+\begin{frame}[t]{Modelos competitivos}
+  \textbf{Entrenamiento:} 140 meses (ene 2014 -- ago 2025) \quad
+  \textbf{Validación:} $h=12$ meses (sep 2025 -- ago 2026)
+  \vspace{3mm}
+  \begin{columns}[T]
+    \column{0.32\textwidth}
+    \begin{block}{Modelo 0}
+      ARIMA$(p,1,q)$ univariado\\ (benchmark)
+    \end{block}
+    \column{0.32\textwidth}
+    \begin{block}{Modelo 1}
+      ARIMA-X con\\ IPI$_t$ + COVID
+    \end{block}
+    \column{0.32\textwidth}
+    \begin{block}{Modelo 2}
+      ARIMA-X con\\ IPI$_t$, IPI$_{t-3}$, IPI$_{t-6}$ + COVID
+    \end{block}
+  \end{columns}
+  \vspace{4mm}
+  \begin{itemize}
+    \item Órdenes $p$ y $q$ elegidos minimizando AIC y BIC.
+    \item Ljung-Box con 24 rezagos y $df = 24-p-q$; normalidad con Shapiro-Wilk.
+    \item Pronóstico evaluado con RMSE, MAE y MAPE.
+  \end{itemize}
+\end{frame}
+
+% =====================================================================
+\section{Aplicación}
+% =====================================================================
+
+\begin{frame}[t]{Análisis exploratorio}
+  \begin{columns}[c]
+    \column{0.62\textwidth}
+    \centering
+    \figura{01_series_originales.pdf}{0.72\textheight}
+    \column{0.36\textwidth}
+    \small
+    \begin{itemize}
+      \item Ambas series son \textbf{no estacionarias} en media.
+      \item 2020: caída sin precedentes del IPI ($-30.8\%$ entre febrero y abril).
+      \item Respuesta: política monetaria expansiva (la tasa baja hasta 1.75\%).
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Estacionalidad del IPI}
+  \begin{columns}[c]
+    \column{0.62\textwidth}
+    \centering
+    \figura{02_estacionalidad.pdf}{0.72\textheight}
+    \column{0.36\textwidth}
+    \small
+    \begin{itemize}
+      \item Patrón anual repetitivo (caídas en abril por Semana Santa, y en enero).
+      \item La tasa \textbf{no} es estacional.
+      \item Por eso se desestacionaliza el $\log(\mathrm{IPI})$ con STL antes de usarlo como regresora.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Estacionariedad}
+  \begin{columns}[c]
+    \column{0.5\textwidth}
+    \centering
+    \begin{tabular}{lcc}
+      \toprule
+      \textbf{Serie} & \textbf{ADF} ($p$) & \textbf{KPSS} ($p$)\\
+      \midrule
+      Tasa              & 0.184 & 0.010\\
+      $\nabla$ Tasa     & 0.357 & 0.100\\
+      IPI desest.       & 0.132 & 0.010\\
+      $\nabla$ IPI desest. & 0.010 & 0.100\\
+      \bottomrule
+    \end{tabular}
+
+    \vspace{3mm}
+    {\footnotesize ADF: $H_0$ raíz unitaria. \; KPSS: $H_0$ estacionaria.}
+    \column{0.46\textwidth}
+    \begin{itemize}
+      \item En niveles ambas series tienen \textbf{raíz unitaria}.
+      \item \texttt{ndiffs} (KPSS) sugiere $d=1$ para las dos series.
+      \item La tasa cambia en ``escalones'', y eso reduce la potencia del ADF.
+    \end{itemize}
+    \vspace{2mm}
+    \begin{block}{Decisión}
+      $d = 1$: se trabaja con $\nabla = (1-B)$.
+    \end{block}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Tasa diferenciada: ACF y PACF}
+  \begin{columns}[c]
+    \column{0.62\textwidth}
+    \centering
+    \figura{03_acf_pacf.pdf}{0.72\textheight}
+    \column{0.36\textwidth}
+    \small
+    \begin{itemize}
+      \item $\nabla y_t$ oscila alrededor de cero.
+      \item La ACF y la PACF muestran dependencia significativa.
+      \item Se necesita un componente ARMA para los errores.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Pre-blanqueamiento y CCF}
+  \begin{columns}[c]
+    \column{0.6\textwidth}
+    \centering
+    \figura{04_ccf.pdf}{0.70\textheight}
+    \column{0.38\textwidth}
+    \small
+    \begin{enumerate}
+      \item ARIMA al IPI: $\alpha_t = \frac{\phi_x(B)}{\theta_x(B)}\nabla x_t$.
+      \item Mismo filtro a la tasa: $\beta_t = \frac{\phi_x(B)}{\theta_x(B)}\nabla y_t$.
+      \item $\mathrm{CCF}(\alpha_t,\beta_{t+k})$ con bandas $\pm 1.96/\sqrt{T}$.
+    \end{enumerate}
+    \vspace{1mm}
+    Barras \textbf{positivas} y significativas en rezagos \textbf{negativos} (entre $-1.4$ y $-0.6$): el IPI se \textbf{adelanta} a la tasa.\\[1mm]
+    {\footnotesize En R el eje de la CCF está en \textbf{años}: $-0.5 = 6$ meses, $-1 = 12$ meses.}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Modelo estimado}
+  \begin{block}{Regresión con errores ARIMA(4,1,1)}
+    \[
+      y_t = \beta_1\,\mathrm{IPI}_t + \beta_2\,D_t^{COVID} + n_t,
+      \qquad
+      \phi(B)\,(1-B)\,n_t = \theta(B)\,w_t
+    \]
+    \[
+      \phi(B) = 1-\phi_1B-\phi_2B^2-\phi_3B^3-\phi_4B^4,\qquad \theta(B)=1-\theta_1B
+    \]
+  \end{block}
+  \vspace{2mm}
+  \centering
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Modelo} & \textbf{Especificación} & \textbf{AIC} & \textbf{BIC}\\
+    \midrule
+    Modelo 0: ARIMA              & ARIMA(4,1,1) & $-52.78$ & $-35.44$\\
+    Modelo 1: IPI + COVID        & ARIMA(4,1,1) errores & $-49.28$ & $-26.16$\\
+    Modelo 2: IPI rezagos + COVID & ARIMA(4,1,1) errores & $-46.89$ & $-17.99$\\
+    \bottomrule
+  \end{tabular}
+
+\end{frame}
+
+\begin{frame}[t]{Diagnóstico de residuos}
+  \begin{columns}[c]
+    \column{0.62\textwidth}
+    \centering
+    \figura{05_residuos.pdf}{0.74\textheight}
+    \column{0.36\textwidth}
+    \small
+    \begin{itemize}
+      \item Los residuos oscilan alrededor de cero; la dummy controla el choque de 2020.
+      \item La ACF de los residuos queda dentro de las bandas (salvo un rezago aislado).
+      \item Ljung-Box (24 rezagos): no se rechaza $H_0$, los residuos son \textbf{ruido blanco}.
+      \item Histograma con colas pesadas: la normalidad es dudosa (Shapiro-Wilk).
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Pronóstico ARIMA-X}
+  \begin{columns}[c]
+    \column{0.62\textwidth}
+    \centering
+    \figura{06_pronostico_arimax.pdf}{0.72\textheight}
+    \column{0.36\textwidth}
+    \small
+    \begin{itemize}
+      \item Intervalos de confianza del 80\% y 95\%.
+      \item Con $d\ge1$ la varianza del error de pronóstico crece con $h$, y las bandas se ensanchan.
+      \item Pronóstico \textbf{ex post}: se usa el IPI observado del periodo de validación.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+\begin{frame}[t]{Validación fuera de muestra}
+  \begin{columns}[c]
+    \column{0.56\textwidth}
+    \centering
+    \figura{07_validacion.pdf}{0.66\textheight}
+    \column{0.42\textwidth}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{lccc}
+      \toprule
+      \textbf{Modelo} & \textbf{RMSE} & \textbf{MAE} & \textbf{MAPE}\\
+      \midrule
+      ARIMA       & 0.994 & 0.772 & 6.92\%\\
+      ARIMA-X     & 1.009 & 0.782 & 7.01\%\\
+      ARIMA-X rez. & 1.028 & 0.794 & 7.10\%\\
+      \bottomrule
+    \end{tabular}
+
+    \vspace{2mm}
+    \raggedright
+    \begin{itemize}
+      \item Los tres pronósticos son \textbf{casi idénticos}.
+      \item Ninguno anticipa el alza de la tasa de 2026 (de 9.25\% a 12\%): fue una decisión de política, no un efecto del IPI.
+    \end{itemize}
+  \end{columns}
+\end{frame}
+
+% =====================================================================
+\section{Conclusiones}
+% =====================================================================
+
+\begin{frame}[t]{Conclusiones}
+  \begin{enumerate}
+    \item \textbf{MCO no es válido con inercia temporal:} con series I(1), produce regresión espuria y errores estándar subestimados.
+    \item \textbf{ARIMA-X:} modela a la vez el efecto de la economía real y la memoria de la serie, con errores ARIMA(4,1,1).
+    \item \textbf{Causalidad rezagada:} el pre-blanqueamiento muestra que el IPI se adelanta a la tasa varios meses.
+    \item \textbf{Pronóstico:} en la validación, el IPI aporta poco frente al ARIMA univariado; la tasa responde sobre todo a la inflación y a decisiones de política.
+    \item \textbf{Intervención COVID-19:} la dummy estabiliza la varianza residual, y los residuos quedan como ruido blanco (Ljung-Box, $p>0.05$).
+  \end{enumerate}
+\end{frame}
+
+\begin{frame}[t]{Limitación: pronóstico ex ante}
+  \begin{alertblock}{Las regresoras también deben pronosticarse}
+    Para predecir $y_{T+h}$ se necesitan los valores futuros del IPI. Su incertidumbre se transmite al pronóstico de la tasa:
+    \[
+      \mathrm{Var}\big(e_y(h)\big) \;\approx\; \mathrm{Var}\big(e_n(h)\big) + \bm{\beta}'\,\mathrm{Var}\big(e_x(h)\big)\,\bm{\beta}
+    \]
+  \end{alertblock}
+  \vspace{2mm}
+  \begin{itemize}
+    \item La ventaja del ARIMA-X está en el \textbf{corto y mediano plazo}.
+    \item En la práctica se usan pronósticos del IPI o \textbf{escenarios}.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[t]{Referencias}
+  \footnotesize
+  \begin{itemize}
+    \item Amézquita Bravo, C. C. (2021). \emph{Evaluación de modelos de series de tiempo para pronosticar la demanda de transporte aéreo a corto y mediano plazo en Colombia} [Tesis de maestría]. Universidad Nacional de Colombia.
+    \item Box, G. E. P. y Tiao, G. C. (1975). Intervention analysis with applications to economic and environmental problems. \emph{JASA}, 70(349), 70--79.
+    \item Chen, C. y Liu, L.-M. (1993). Joint estimation of model parameters and outlier effects in time series. \emph{JASA}, 88(421), 284--297.
+    \item DataCamp. (2024). \emph{Exogenous vs. Endogenous Variables: Key Differences and Examples}.
+    \item Hyndman, R. J. y Athanasopoulos, G. (2021). \emph{Forecasting: Principles and Practice} (3.a ed.). OTexts.
+    \item Ljung, G. M. y Box, G. E. P. (1978). On a measure of lack of fit in time series models. \emph{Biometrika}, 65(2), 297--303.
+    \item Ortiz Martín, R. (2022). \emph{Metodología ARIMAX aplicada al análisis de la evolución de datos de suicidios en España} [TFG]. Universitat de Barcelona.
+    \item Shumway, R. H. y Stoffer, D. S. (2017). \emph{Time Series Analysis and Its Applications} (4.a ed.). Springer.
+    \item Wei, W. W. S. (2006). \emph{Time Series Analysis: Univariate and Multivariate Methods} (2.a ed.). Addison-Wesley.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}[plain]
+  \centering
+  \vspace{2cm}
+  {\usebeamerfont{title}\usebeamercolor[fg]{structure}\Huge\bfseries ¡Gracias!}\\[6mm]
+  {\large Preguntas}\\[10mm]
+  {\small Grupo 3 -- Seminario de Series de Tiempo -- Universidad de Antioquia}
+\end{frame}
+
+\end{document}
